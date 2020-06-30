@@ -1,0 +1,174 @@
+---
+title: "Ixodes Measurements"
+author: "Hannah"
+date: "January 29, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+library(tidyverse)
+library(reshape2)
+library(corrplot)
+library("Hmisc")
+library(factoextra)
+library(multcomp)
+library(plyr)
+```
+
+```{r loading}
+setwd("D:/Rfiles/Tick_Count_gen")
+male<-read_csv("data/maleALL.csv")
+female<-read_csv("data/femaleALL.csv")
+female<-subset(female,Measured_by=="HM")
+male<-subset(male,Measured_by=="RS")
+
+female<-na.exclude(female)
+male<-na.exclude(male)
+```
+
+```{r female PCA}
+v<-female[,11:14]
+res2 <- rcorr(as.matrix(log(v)))
+res2
+res <- cor(v)
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+corrplot(res)
+
+#log transform the female
+femalelog<-log(female[,11:14])
+
+#get the shapevalues
+vars <- names(female)[11:14]
+fits <- lapply(vars, function(x) {glm(substitute(i ~ Host, list(i = as.name(x))), data = female)})
+
+femalelogS<-data.frame(lapply(fits, residuals))
+
+#PCA 
+res.pcaS <- prcomp(femalelogS, scale = TRUE)
+res.pca <- prcomp(femalelog, scale = TRUE)
+
+varS <- get_pca_var(res.pcaS)
+varS
+var <- get_pca_var(res.pca)
+var
+#contribution of each dimention
+k<-data.frame(var$contrib[, 1:4])
+k
+
+kS<-data.frame(varS$contrib[, 1:4])
+kS
+
+#adding the PC to file
+scores<-data.frame(res.pca$x)
+scoresS<-data.frame(res.pcaS$x)
+female$PC1logS<-scoresS$PC1
+female$PC2logS<-scoresS$PC2
+
+female$PC1log<-scores$PC1
+female$PC2log<-scores$PC2
+```
+
+```{r female PCA graph}
+fviz_pca_biplot(res.pca, col.var="contrib",
+                label= "var"
+)+
+  scale_color_gradient2(low="white", mid="blue",
+                        high="red", midpoint=24) + theme_minimal()
+```
+
+```{r female PCA graph}
+fviz_pca_biplot(res.pcaS, col.var="contrib",
+                label= "var"
+)+
+  scale_color_gradient2(low="white", mid="blue",
+                        high="red", midpoint=24) + theme_minimal()
+```
+
+##Male PCA
+
+```{r male PCA}
+v<-male[,11:14]
+res2 <- rcorr(as.matrix(log(v)))
+res2
+res <- cor(v)
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+corrplot(res)
+
+#log transform the male
+malelog<-log(male[,11:14])
+
+#get the shapevalues
+vars <- names(male)[11:14]
+fits <- lapply(vars, function(x) {glm(substitute(i ~ Host, list(i = as.name(x))), data = male)})
+
+malelogS<-data.frame(lapply(fits, residuals))
+
+#PCA 
+res.pcaS <- prcomp(malelogS, scale = TRUE)
+res.pca <- prcomp(malelog, scale = TRUE)
+
+varS <- get_pca_var(res.pcaS)
+varS
+var <- get_pca_var(res.pca)
+var
+#contribution of each dimention
+k<-data.frame(var$contrib[, 1:4])
+k
+
+kS<-data.frame(varS$contrib[, 1:4])
+kS
+
+#adding the PC to file
+scores<-data.frame(res.pca$x)
+scoresS<-data.frame(res.pcaS$x)
+male$PC1logS<-scoresS$PC1
+male$PC2logS<-scoresS$PC2
+
+male$PC1log<-scores$PC1
+male$PC2log<-scores$PC2
+```
+
+```{r male PCA graph}
+fviz_pca_biplot(res.pca, col.var="contrib",
+                label= "var"
+)+
+  scale_color_gradient2(low="white", mid="blue",
+                        high="red", midpoint=24) + theme_minimal()
+```
+
+```{r male PCA graph}
+fviz_pca_biplot(res.pcaS, col.var="contrib",
+                label= "var"
+)+
+  scale_color_gradient2(low="white", mid="blue",
+                        high="red", midpoint=24) + theme_minimal()
+```
+
+##GLM female
+
+```{r glm female}
+m1<-glm(PC1log~Gen_Location+Year+Host+Measured_by, data= female)
+m2<-glm(PC1log~Year+Host+Measured_by, data= female)
+m3<-glm(PC1log~Host+Gen_Location+Measured_by, data= female)
+m4<-glm(PC1log~Gen_Location+Year+Measured_by, data= female)
+m5<-glm(PC1log~Year+Measured_by, data= female)
+m6<-glm(PC1log~Host+Measured_by, data= female)
+m7<-glm(PC1log~Gen_Location+Measured_by, data= female)
+m8<-glm(PC1log~Measured_by, data= female)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8)
+```
+
+```{r glm female}
+m8<-glm(PC1logS~Measured_by, data= female)
+summary(m8)
+
+ddply(female,"Host",summarise,
+          N = length(PC1log),
+          mean = mean(PC1log,na.rm=TRUE))
+```

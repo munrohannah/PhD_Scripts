@@ -1,0 +1,317 @@
+---
+title: "Ixodes Count Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up the file
+
+Setting the working directory, loading packages, and loading data.
+```{r packages}
+library(MASS)
+library(car)
+library(mgcv)
+library(ggplot2)
+library(boot)
+library(plyr)
+library(visreg)
+```
+
+```{r data}
+setwd("D:/Rfiles/Tick_count_gen") #how to set my working directory
+data<-read.csv("data/TickDynamicsWanom2.csv",header=TRUE) #how to import a file, csv file, and has a header
+summary(data) #gives means etc
+
+weather<-read.csv("data/WEATHER2.csv",header =T)
+nao<-read.csv("data/NAO.csv",header =T)
+all <- merge(data,weather,by=c("Date","Loc"))
+all <- merge(all,nao,by="Date")
+
+summary(all)
+
+data<-all
+```
+
+##Breaking the data into the life stages
+
+```{r subsetting}
+data$Year<-factor(data$Year)
+data<-subset(data,Host=="COMU")
+data<-subset(data,Loc=="GULL")
+#subsetting data for each instar
+dataL<-subset(data,instar==1)
+dataN<-subset(data,instar==2)
+dataA<-subset(data,instar==3)
+```
+
+##AIC on Larva
+
+```{r larva glm}
+m1 <- glm.nb(Count ~ Year, data = dataL)
+m2 <- glm.nb(Count ~ MaxT, data = dataL)
+m3 <- glm.nb(Count ~ MinT, data = dataL)
+m4 <- glm.nb(Count ~ MeanT, data = dataL)
+m5 <- glm.nb(Count ~ Precip, data = dataL)
+m6 <- glm.nb(Count ~ NAO, data = dataL)
+m7 <- glm.nb(Count ~ Year+MaxT, data = dataL)
+m8 <- glm.nb(Count ~ Year+MinT, data = dataL)
+m9 <- glm.nb(Count ~ Year+MeanT, data = dataL)
+m10 <- glm.nb(Count ~ Year+Precip, data = dataL)
+m11 <- glm.nb(Count ~ Year+NAO, data = dataL)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+
+models = list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+```{r larva topmodel}
+Anova(m7,type="3")
+```
+
+```{r larva gam}
+gam1<-gam(Count~s(Day.x)+Year.x+MaxT, family = nb(), data=dataL)
+AIC(gam1)
+logLik(gam1)
+gam2<-gam(Count~s(Day.x), family = nb(), data=dataL)
+AIC(gam2)
+logLik(gam2)
+summary(gam1)
+anova(gam1)
+plot(gam1)
+```
+
+```{r}
+plotdata <- visreg(gam1, type = "contrast", plot = F)
+
+smooths <- ldply(plotdata, function(part)   
+  data.frame(Variable = part$meta$x, 
+             x=part$fit[[part$meta$x]], 
+             smooth=part$fit$visregFit, 
+             lower=part$fit$visregLwr, 
+             upper=part$fit$visregUpr))
+
+P5 <- smooths[ which(smooths$Variable== "Day.x"), ]
+P5$smooth2 <- exp(P5$smooth)
+P5$lower2 <- exp(P5$lower)
+P5$upper2 <- exp(P5$upper)
+
+plot(P5$x,P5$smooth2)
+lines(P5$x,P5$lower2)
+lines(P5$x,P5$upper2)
+
+
+fig<-ggplot(dataL,aes(x = Day.x, y = Count))+
+  geom_point(aes(shape=Year),size= 3)+
+  geom_line(aes(x, smooth2), P5)+
+  ylab("Larval ticks collected")+
+  xlab("Julian Day")+
+  scale_y_log10()+
+  scale_x_continuous(limit=c(145,230),breaks = c(151,181,212))+
+  theme_classic()
+fig
+
+```
+
+```{r}
+library(multcomp)
+summary(glht(m7, mcp(Year="Tukey")))
+```
+
+```{r function}
+min.mean.sd.max <- function(x) {
+  r <- c(min(x), mean(x) - sd(x), mean(x), mean(x) + sd(x), max(x))
+  names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
+  r
+}
+
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+    library(plyr)
+
+    # New version of length which can handle NA's: if na.rm==T, don't count them
+    length2 <- function (x, na.rm=FALSE) {
+        if (na.rm) sum(!is.na(x))
+        else       length(x)
+    }
+
+    # This does the summary. For each group's data frame, return a vector with
+    # N, mean, and sd
+    datac <- ddply(data, groupvars, .drop=.drop,
+      .fun = function(xx, col) {
+        c(N    = length2(xx[[col]], na.rm=na.rm),
+          mean = mean   (xx[[col]], na.rm=na.rm),
+          sd   = sd     (xx[[col]], na.rm=na.rm)
+        )
+      },
+      measurevar
+    )
+
+    # Rename the "mean" column    
+    datac <- rename(datac, c("mean" = measurevar))
+
+    datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+
+    # Confidence interval multiplier for standard error
+    # Calculate t-statistic for confidence interval: 
+    # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+    ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+    datac$ci <- datac$se * ciMult
+
+    return(datac)
+}
+```
+
+```{r}
+summarySE(dataL,measurevar = "Count", groupvars = "Year")
+
+ddply(dataL,"Year",summarise, mean=mean(Count), min = min(Count), max = max(Count))
+
+```
+
+```{r graph year larva}
+plot1 <- ggplot(aes(y = (Count), x = factor(Year)), data = dataL)
+plot1 <- plot1 + stat_summary(fun.data = min.mean.sd.max, geom = "boxplot") + 
+  geom_jitter(position=position_jitter(width=.2), size=3) + 
+  ylab("Count")+
+  xlab("Year")+
+  scale_y_log10()+
+  theme_classic()
+plot1
+```
+
+#Try with Nymphs
+
+```{r nymph glm}
+m1 <- glm.nb(Count ~ Year, data = dataN)
+m2 <- glm.nb(Count ~ MaxT, data = dataN)
+m3 <- glm.nb(Count ~ MinT, data = dataN)
+m4 <- glm.nb(Count ~ MeanT, data = dataN)
+m5 <- glm.nb(Count ~ Precip, data = dataN)
+m6 <- glm.nb(Count ~ NAO, data = dataN)
+m7 <- glm.nb(Count ~ Year+MaxT, data = dataN)
+m8 <- glm.nb(Count ~ Year+MinT, data = dataN)
+m9 <- glm.nb(Count ~ Year+MeanT, data = dataN)
+m10 <- glm.nb(Count ~ Year+Precip, data = dataN)
+m11 <- glm.nb(Count ~ Year+NAO, data = dataN)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+
+models = list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+```{r nymph topmodel}
+Anova(m11,type="3")
+summary(m11)
+```
+```{r}
+summary(glht(m11, mcp(Year="Tukey")))
+```
+
+```{r}
+summarySE(dataN,measurevar = "Count", groupvars = "Year")
+
+ddply(dataN,"Year",summarise, mean=mean(Count), min = min(Count), max = max(Count))
+
+```
+
+```{r graph year larva}
+plot1 <- ggplot(aes(y = (Count), x = factor(Year)), data = dataN)
+plot1 <- plot1 + stat_summary(fun.data = min.mean.sd.max, geom = "boxplot") + 
+  geom_jitter(position=position_jitter(width=.2), size=3) + 
+  ylab("Count")+
+  xlab("Year")+
+  scale_y_log10()+
+  theme_classic()
+plot1
+```
+
+```{r}
+plot1<-ggplot(aes(y = (Count), x = (NAO)), data = dataN)
+          
+plot1+geom_point(aes(shape=Year),data=dataN)+
+  geom_abline(intercept = exp(1.9), slope = exp(0.6631))+
+  ylab("Nymphal ticks collected")+
+  xlab("NAO daily index")+
+  #scale_y_log10()+
+  theme_classic()
+```
+
+
+```{r nymph gam}
+gam1<-gam(Count~s(Day.x)+NAO+(Year), family = nb(), data=dataN)
+AIC(gam1)
+logLik(gam1)
+summary(gam1)
+plot(gam1)
+```
+
+##Now with adults
+
+```{r AIC adults}
+m1 <- glm.nb(Count ~ Year, data = dataA)
+m2 <- glm.nb(Count ~ MaxT, data = dataA)
+m3 <- glm.nb(Count ~ MinT, data = dataA)
+m4 <- glm.nb(Count ~ MeanT, data = dataA)
+m5 <- glm.nb(Count ~ Precip, data = dataA)
+m6 <- glm.nb(Count ~ NAO, data = dataA)
+m7 <- glm.nb(Count ~ Year+MaxT, data = dataA)
+m8 <- glm.nb(Count ~ Year+MinT, data = dataA)
+m9 <- glm.nb(Count ~ Year+MeanT, data = dataA)
+m10 <- glm.nb(Count ~ Year+Precip, data = dataA)
+m11 <- glm.nb(Count ~ Year+NAO, data = dataA)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+
+
+models = list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+
+```{r adult topmodel}
+Anova(m1,type="3")
+```
+
+```{r adult gam}
+gam1<-gam(Count~s(Day.x)+Year, family = nb(), data=dataA)
+AIC(gam1)
+logLik(gam1)
+summary(gam1)
+plot(gam1)
+```
+
+```{r}
+summary(glht(m1, mcp(Year="Tukey")))
+```
+
+```{r}
+summarySE(dataA,measurevar = "Count", groupvars = "Year")
+
+ddply(dataA,"Year",summarise, mean=mean(Count), min = min(Count), max = max(Count))
+
+```
+
+```{r graph year larva}
+plot1 <- ggplot(aes(y = (Count), x = factor(Year)), data = dataA)
+plot1 <- plot1 + stat_summary(fun.data = min.mean.sd.max, geom = "boxplot") + 
+  geom_jitter(position=position_jitter(width=.2), size=3) + 
+  ylab("Count")+
+  xlab("Year")+
+  scale_y_log10()+
+  theme_classic()
+plot1
+```

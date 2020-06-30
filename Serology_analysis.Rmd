@@ -1,0 +1,83 @@
+---
+title: "Borrelia Serological Analysis"
+output: html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up the file
+
+Setting the working directory, loading packages, and loading data.
+
+```{r}
+setwd("D:/Rfiles/TickPrev") 
+data<-read.csv("data/ser.csv",header=TRUE)
+library(MASS)
+library(car)
+```
+
+## Data Check
+
+Just to ensure that everything loaded properly. I look at the head() so the top five rows. I also look at the struture which should let me know if anything imported funny and which rows are catagorical or continous.
+
+I also changed to variables to factors so that they run properly in the GLM
+
+```{r}
+head(data)
+str(data)
+
+data$pos<-factor(data$pos)
+data$Year<-factor(data$Year)
+```
+
+## GLM time
+
+Loading the models.
+
+I am looking at the rate of positive based on serology related to species of collection, location/colony, and year.
+
+This is binomial because it is postive/negative data
+
+Finally print the AIC values to determine the 'top' model.
+
+```{r}
+m1 <- with(data, glm(pos ~ Species, family = binomial))
+m2 <- with(data, glm(pos ~ Loc, family = binomial))
+#m3 <- with(data, glm(pos ~ Year, family = binomial))
+m4 <- with(data, glm(pos ~ Species+Loc, family = binomial))
+#m5 <- with(data, glm(pos ~ Species+Year, family = binomial))
+#m6 <- with(data, glm(pos ~ Loc+Year, family = binomial))
+#m7 <- with(data, glm(pos ~ Loc+Year+Species, family = binomial))
+
+AIC(m1,m2,m4)
+```
+
+It is important to bring the loglik values too.
+
+```{r}
+logLik(m1)
+logLik(m2)
+logLik(m4)
+
+```
+
+I always take a look at the top model to see what is significant and ensure nothing funky has happened
+
+```{r}
+summary(m1)
+Anova(m2,3)
+```
+
+## Comparisons in top model
+
+Now this is questionable as it is mixing multiple statitical approches but this is what was wanted in my thesis.
+
+This is how to look at the between catagory comparisons using Tukey test in the top model
+
+```{r}
+library(multcomp)
+summary(glht(m1, mcp(Species="Tukey")))
+```
+

@@ -1,0 +1,502 @@
+---
+title: "Ixodes Measurements Multiple"
+author: "Hannah"
+date: "January 29, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(corrplot)
+library("Hmisc")
+library(factoextra)
+library(multcomp)
+library(plyr)
+library(lubridate)
+library(mgcv)
+library(cowplot)
+library(GGally)
+```
+
+```{r loading data}
+setwd("D:/Rfiles/Tick_Count_gen")
+male<-read_csv("data/data3M.csv")
+female<-read_csv("data/data3F.csv")
+female<-na.exclude(female)
+male<-na.exclude(male)
+
+meta<-read_csv("data/tick_meta.csv")
+meta$Date<-mdy(meta$Date_Collected)
+meta$month<-month(meta$Date)
+meta$Jday<-yday(meta$Date)
+meta$year<-year(meta$Date)
+meta$Tick_vial<-meta$Vial_Number
+
+meta$year<-as.factor(meta$year)
+
+female<-left_join(female,meta,by="Tick_vial")
+male<-left_join(male,meta,by="Tick_vial")
+```
+
+```{r female PCA}
+v<-female[,4:33]
+#producing a figure
+fcor<-ggcorr(v,  nbreaks = 6, palette = "RdYlBu",hjust = 0.75, size = 2, layout.exp = 1)+theme(legend.position=c(0,0.8))
+
+
+#log transform the female
+femalelog<-log(female[,4:33])
+
+fcorlog<-ggcorr(femalelog,  nbreaks = 6, palette = "RdYlBu",hjust = 0.75, size = 2, layout.exp = 1)+theme(legend.position = "none")
+
+#get the shapevalues
+vars <- names(female)[4:33]
+fits <- lapply(vars, function(x) {glm(substitute(i ~ as.factor(Host), list(i = as.name(x))), data = female)})
+
+femalelogS<-data.frame(lapply(fits, residuals))
+colnames(femalelogS)<-colnames(v)
+
+fcorlogS<-ggcorr(femalelogS,  nbreaks = 6, palette = "RdYlBu",hjust = 0.75, size = 2, layout.exp = 1)+theme(legend.position = "none")
+
+#PCA 
+res.pcaS <- prcomp(femalelogS, scale = TRUE)
+res.pca <- prcomp(femalelog, scale = TRUE)
+
+varS <- get_pca_var(res.pcaS)
+var <- get_pca_var(res.pca)
+
+#contribution of each dimention
+k<-data.frame(var$contrib[, 1:2])
+write.csv(k,"female_cont_log.csv")
+
+kS<-data.frame(varS$contrib[, 1:2])
+write.csv(kS,"female_cont_logS.csv")
+
+#loadings
+load<-data.frame(res.pca$rotation[,1:3])
+load$measure<-row.names(load)
+load2<-data.frame(res.pcaS$rotation[,1:3])
+load2$measure<-row.names(load2)
+load<-left_join(load,load2,by="measure")
+write.csv(load,"female_load.csv")
+
+#adding the PC to file
+scores<-data.frame(res.pca$x)
+scoresS<-data.frame(res.pcaS$x)
+female$PC1logS<-scoresS$PC1
+female$PC2logS<-scoresS$PC2
+
+female$PC1log<-scores$PC1
+female$PC2log<-scores$PC2
+```
+
+```{r female PCA graph}
+female_log<-fviz_pca_biplot(res.pca, col.var="contrib",
+                label= "var")+scale_y_continuous(breaks=c(-4,0,4))+
+  scale_color_gradient2(high="#d73027", mid="#ffffbf",
+                        low="#4575b4", midpoint=2.5,
+                        limits=c(0, 5)) + 
+  theme_classic()+ggtitle("")+theme(legend.position = "none")
+```
+
+```{r female PCA graph2}
+female_logS<-fviz_pca_biplot(res.pcaS, col.var="contrib",
+                label= "var")+
+  scale_color_gradient2(high="#d73027", mid="#ffffbf",
+                        low="#4575b4", midpoint=2.5,
+                        limits=c(0, 5)) + 
+  theme_classic()+ggtitle("")
+```
+
+##Male PCA
+
+```{r male PCA}
+v<-male[,4:35]
+mcor<-ggcorr(v,  nbreaks = 6, palette = "PRGn",hjust = 0.75, size = 2, layout.exp = 1)+theme(legend.position=c(0,0.8))
+
+#log transform the male
+malelog<-log(male[,4:35])
+
+mcorlog<-ggcorr(malelog,  nbreaks = 6, palette = "PRGn",hjust = 0.75, size = 2, layout.exp = 1)+theme(legend.position = "none")
+
+#get the shapevalues
+vars <- names(male)[4:35]
+fits <- lapply(vars, function(x) {glm(substitute(i ~ Host, list(i = as.name(x))), data = male)})
+
+malelogS<-data.frame(lapply(fits, residuals))
+colnames(malelogS)<-colnames(v)
+
+mcorlogS<-ggcorr(malelogS,  nbreaks = 6, palette = "PRGn",hjust = 0.75, size = 2, layout.exp = 1)+theme(legend.position = "none")
+
+#PCA 
+res.pcaS <- prcomp(malelogS, scale = TRUE)
+res.pca <- prcomp(malelog, scale = TRUE)
+
+varS <- get_pca_var(res.pcaS)
+var <- get_pca_var(res.pca)
+
+#contribution of each dimention
+k<-data.frame(var$contrib[, 1:2])
+write.csv(k,"male_cont_log.csv")
+
+kS<-data.frame(varS$contrib[, 1:2])
+write.csv(kS,"male_cont_logS.csv")
+
+#loadings
+load<-data.frame(res.pca$rotation[,1:3])
+load$measure<-row.names(load)
+load2<-data.frame(res.pcaS$rotation[,1:3])
+load2$measure<-row.names(load2)
+load<-left_join(load,load2,by="measure")
+write.csv(load,"male_load.csv")
+
+#adding the PC to file
+scores<-data.frame(res.pca$x)
+scoresS<-data.frame(res.pcaS$x)
+male$PC1logS<-scoresS$PC1
+male$PC2logS<-scoresS$PC2
+
+male$PC1log<-scores$PC1
+male$PC2log<-scores$PC2
+```
+
+```{r corgraph}
+pdf("corgraph.pdf",10,7)
+corgraphF<-plot_grid(fcor,fcorlog,fcorlogS,labels=c("", "log", "log shape"), ncol = 3)
+corgraphM<-plot_grid(mcor,mcorlog,mcorlogS,labels=c("", "log", "log shape"), ncol = 3)
+corgraph<-plot_grid(corgraphF, corgraphM,labels=c("Female: raw", "Male: raw"), ncol = 1)
+corgraph
+dev.off()
+```
+
+
+```{r male PCA graph}
+male_log<-fviz_pca_biplot(res.pca, col.var="contrib",
+                label= "var") +
+  scale_color_gradient2(low="#1b7837", mid="#f7f7f7",
+                        high="#762a83", midpoint=2.5,
+                        limits=c(0, 5)) + 
+  theme_classic()+ggtitle("")+theme(legend.position = "none")
+```
+
+```{r male PCA graph2}
+male_logS<-fviz_pca_biplot(res.pcaS, col.var="contrib",
+                label= "var")+
+    scale_color_gradient2(low="#1b7837", mid="#f7f7f7",
+                        high="#762a83", midpoint=2.5,
+                        limits=c(0, 5)) + 
+  theme_classic()+ggtitle("")
+```
+
+```{r PCA graph}
+pdf("biplots.pdf", 7,6)
+bilog<-plot_grid(female_log,male_log,
+                 labels=c("Female: log","Male: log" ),
+                    
+                     ncol = 1,label_size = 10)
+bilogS<-plot_grid(female_logS,male_logS,
+                    labels=c("log Shape","log Shape"),    
+                     ncol = 1,label_size = 10)
+biTogeather<-plot_grid(bilog,bilogS, ncol=2,rel_widths = c(1, 1.2))
+biTogeather
+dev.off()
+save_plot("plot2by2.png", biTogeather,base_aspect_ratio = 1.5)
+```
+
+##GLM female
+
+```{r glm female PC1log}
+m1<-glm(PC1log~Gen_Location+year+Host, data= female)
+m2<-glm(PC1log~year+Host, data= female)
+m3<-glm(PC1log~Host+Gen_Location, data= female)
+m4<-glm(PC1log~Gen_Location+year, data= female)
+m5<-glm(PC1log~year, data= female)
+m6<-glm(PC1log~Host, data= female)
+m7<-glm(PC1log~Gen_Location, family = gaussian, data= female)
+
+gam1<-gam(PC1log~s(Jday) , data=female)
+gam2<-gam(PC1log~s(Jday)+year , data=female)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7,gam1,gam2))
+
+models = list(m1,m2,m3,m4,m5,m6,m7,gam1,gam2)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","gam1","gam2")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICfemalePC1log.csv")
+x
+```
+
+```{r glm female anova}
+summary(m4)
+anova(m4)
+TukeyHSD(aov(m4),which = 'Gen_Location')
+TukeyHSD(aov(m4),which = 'year')
+```
+
+```{r glm female PC2log}
+m1<-glm(PC2log~Gen_Location+year+Host, data= female)
+m2<-glm(PC2log~year+Host, data= female)
+m3<-glm(PC2log~Host+Gen_Location, data= female)
+m4<-glm(PC2log~Gen_Location+year, data= female)
+m5<-glm(PC2log~year, data= female)
+m6<-glm(PC2log~Host, data= female)
+m7<-glm(PC2log~Gen_Location, data= female)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+
+gam1<-gam(PC2log~s(Jday) , data=female)
+gam2<-gam(PC2log~s(Jday)+year , data=female)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7,gam1,gam2))
+
+models = list(m1,m2,m3,m4,m5,m6,m7,gam1,gam2)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","gam1","gam2")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICfemalePC2log.csv")
+x
+```
+
+```{r glm female pc2 log anova}
+summary(m5)
+anova(m5)
+TukeyHSD(aov(m5))
+```
+
+```{r glm female PC1logS}
+m1<-glm(PC1logS~Gen_Location+year+Host, data= female)
+m2<-glm(PC1logS~year+Host, data= female)
+m3<-glm(PC1logS~Host+Gen_Location, data= female)
+m4<-glm(PC1logS~Gen_Location+year, data= female)
+m5<-glm(PC1logS~year, data= female)
+m6<-glm(PC1logS~Host, data= female)
+m7<-glm(PC1logS~Gen_Location, data= female)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+
+gam1<-gam(PC1logS~s(Jday) , data=female)
+gam2<-gam(PC1logS~s(Jday)+year+Gen_Location , data=female)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7,gam1,gam2))
+
+models = list(m1,m2,m3,m4,m5,m6,m7,gam1,gam2)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","gam1","gam2")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICfemalePC1logS.csv")
+x
+```
+
+```{r F PC1 logs gam}
+summary(gam1)
+plot(gam1)
+```
+
+```{r glm female pc1 logs anova}
+summary(m4)
+anova(m4)
+TukeyHSD(aov(m4),which="year")
+TukeyHSD(aov(m4),which="Gen_Location")
+```
+
+```{r glm female pc2logs}
+m1<-glm(PC2logS~Gen_Location+year+Host, data= female)
+m2<-glm(PC2logS~year+Host, data= female)
+m3<-glm(PC2logS~Host+Gen_Location, data= female)
+m4<-glm(PC2logS~Gen_Location+year, data= female)
+m5<-glm(PC2logS~year, data= female)
+m6<-glm(PC2logS~Host, data= female)
+m7<-glm(PC2logS~Gen_Location, data= female)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+
+gam1<-gam(PC2logS~s(Jday) , data=female)
+gam2<-gam(PC2logS~s(Jday)+year , data=female)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7,gam1,gam2))
+
+models = list(m1,m2,m3,m4,m5,m6,m7,gam1,gam2)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","gam1","gam2")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICfemalePC2logS.csv")
+x
+```
+
+
+```{r glm female pc2 logs anova}
+summary(m5)
+anova(m5)
+TukeyHSD(aov(m5),which="year")
+```
+
+```{r glm female summary}
+
+ddply(female,"Gen_Location",summarise,
+          N = length(PC1log),
+          meanPC1log = mean(PC1log,na.rm=TRUE),
+          meanPC2log = mean(PC2log,na.rm=TRUE),
+          meanPC1logS = mean(PC1logS,na.rm=TRUE),
+          meanPC2logS = mean(PC2logS,na.rm=TRUE)
+          )
+
+ddply(female,"year",summarise,
+          N = length(PC1log),
+         meanPC1log = mean(PC1log,na.rm=TRUE),
+          meanPC2log = mean(PC2log,na.rm=TRUE),
+          meanPC1logS = mean(PC1logS,na.rm=TRUE),
+          meanPC2logS = mean(PC2logS,na.rm=TRUE)
+          )
+
+ddply(female,"Host",summarise,
+          N = length(PC1log),
+          meanPC1log = mean(PC1log,na.rm=TRUE),
+          meanPC2log = mean(PC2log,na.rm=TRUE),
+          meanPC1logS = mean(PC1logS,na.rm=TRUE),
+          meanPC2logS = mean(PC2logS,na.rm=TRUE)
+          )
+```
+
+##GLM male
+
+```{r glm male PC1log}
+m1<-glm(PC1log~Gen_Location+year+Host, data= male)
+m2<-glm(PC1log~year+Host, data= male)
+m3<-glm(PC1log~Host+Gen_Location, data= male)
+m4<-glm(PC1log~Gen_Location+year, data= male)
+m5<-glm(PC1log~year, data= male)
+m6<-glm(PC1log~Host, data= male)
+m7<-glm(PC1log~Gen_Location, data= male)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7))
+
+models = list(m1,m2,m3,m4,m5,m6,m7)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICmalePC1log.csv")
+x
+```
+
+
+```{r glm male pc1 log anova}
+summary(m5)
+anova(m5)
+TukeyHSD(aov(m5),which="year")
+```
+
+```{r glm male PC2log}
+m1<-glm(PC2log~Gen_Location+year+Host, data= male)
+m2<-glm(PC2log~year+Host, data= male)
+m3<-glm(PC2log~Host+Gen_Location, data= male)
+m4<-glm(PC2log~Gen_Location+year, data= male)
+m5<-glm(PC2log~year, data= male)
+m6<-glm(PC2log~Host, data= male)
+m7<-glm(PC2log~Gen_Location, data= male)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7))
+
+models = list(m1,m2,m3,m4,m5,m6,m7)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICmalePC2log.csv")
+x
+```
+
+```{r glm male pc2 log anova}
+summary(m4)
+anova(m4)
+TukeyHSD(aov(m4),which = "year")
+TukeyHSD(aov(m4),which = "Gen_Location")
+```
+
+```{r glm male pc1 logS}
+m1<-glm(PC1logS~Gen_Location+year+Host, data= male)
+m2<-glm(PC1logS~year+Host, data= male)
+m3<-glm(PC1logS~Host+Gen_Location, data= male)
+m4<-glm(PC1logS~Gen_Location+year, data= male)
+m5<-glm(PC1logS~year, data= male)
+m6<-glm(PC1logS~Host, data= male)
+m7<-glm(PC1logS~Gen_Location, data= male)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7))
+
+models = list(m1,m2,m3,m4,m5,m6,m7)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICmalePC1logS.csv")
+x
+```
+
+```{r glm male pc1 logs anova}
+summary(m5)
+anova(m5)
+TukeyHSD(aov(m5),which="year")
+```
+
+```{r glm male log2S}
+m1<-glm(PC2logS~Gen_Location+year+Host, data= male)
+m2<-glm(PC2logS~year+Host, data= male)
+m3<-glm(PC2logS~Host+Gen_Location, data= male)
+m4<-glm(PC2logS~Gen_Location+year, data= male)
+m5<-glm(PC2logS~year, data= male)
+m6<-glm(PC2logS~Host, data= male)
+m7<-glm(PC2logS~Gen_Location, data= male)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+
+c<-data.frame(AIC(m1,m2,m3,m4,m5,m6,m7))
+
+models = list(m1,m2,m3,m4,m5,m6,m7)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7")
+x$AIC<-sapply(models,AIC)
+x<-left_join(x,c)
+write.csv(x,"AICmalePC2logS.csv")
+x
+```
+
+```{r glm male pc2 logs anova}
+summary(m5)
+anova(m5)
+TukeyHSD(aov(m5),which="year")
+```
+
+```{r glm male anova}
+ddply(male,"Gen_Location",summarise,
+          N = length(PC1log),
+           meanPC1log = mean(PC1log,na.rm=TRUE),
+          meanPC2log = mean(PC2log,na.rm=TRUE),
+          meanPC1logS = mean(PC1logS,na.rm=TRUE),
+          meanPC2logS = mean(PC2logS,na.rm=TRUE)
+          )
+
+ddply(male,"year",summarise,
+          N = length(PC1log),
+           meanPC1log = mean(PC1log,na.rm=TRUE),
+          meanPC2log = mean(PC2log,na.rm=TRUE),
+          meanPC1logS = mean(PC1logS,na.rm=TRUE),
+          meanPC2logS = mean(PC2logS,na.rm=TRUE)
+          )
+
+ddply(male,"Host",summarise,
+          N = length(PC1log),
+           meanPC1log = mean(PC1log,na.rm=TRUE),
+          meanPC2log = mean(PC2log,na.rm=TRUE),
+          meanPC1logS = mean(PC1logS,na.rm=TRUE),
+          meanPC2logS = mean(PC2logS,na.rm=TRUE)
+          )
+```

@@ -1,0 +1,200 @@
+---
+title: "Cleaning data Morphometrics"
+author: "Hannah"
+date: "January 31, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Loading required packages
+
+```{r message=FALSE, warning=FALSE}
+library(plyr)
+library(tidyverse)
+library(cowplot)
+library(rptR)
+library(dplyr)
+```
+
+## Importing raw data
+This a datafile that contains all measurements taken even the ones that were off. There is duplication of samples that can be used for repeatability calcualtions.
+
+Step 1) Import
+Step 2) Convert from wide to long format
+Step 3) Remove NA, retain only AF and AM values, and remove all measures smaller than 10
+
+```{r data}
+setwd("D:/Rfiles/Tick_Count_gen")
+data<-read_csv("data/morph_raw_2.csv")
+data1<-gather(data,4:37, key = "measure",value="value")
+data1<-filter(data1,Age=="AF" | Age=="AM")
+data1<-filter(data1,value>10)
+```
+
+##Graphing histogram of all measures broken down by age
+
+```{r graph histoALL}
+plot0<- ggplot(aes((value)), data = data1)+
+  geom_histogram()+
+  scale_x_log10()+
+  geom_vline(xintercept=10,color="red")+
+  facet_grid(Age~.)
+plot0
+```
+##A function for added min and max box plots to plot
+
+```{r function min max}
+min.mean.sd.max <- function(x) {
+  r <- c(min(x), mean(x) - sd(x), mean(x), mean(x) + sd(x), max(x))
+  names(r) <- c("ymin", "lower", "middle", "upper", "ymax")
+  r
+}
+```
+
+##Graphing all measures summarized by age.
+
+```{r graphing all}
+plot1 <- ggplot(aes(y = (value), x=measure), data = data1)
+plot1 <- plot1 + stat_summary(fun.data = min.mean.sd.max, geom = "boxplot") + 
+  geom_jitter()+
+  scale_y_log10()+
+  facet_grid(Age~.,scales="free")
+plot1
+```
+
+
+##Cleaning up the data to remove crazy values.
+
+Step 1) Calculation of mean based on current values (mean of measure/by age) and append to table
+Step 2) Add the percent difference of value from mean. This is just a measure of how differnet the values are
+Step 3) Values that differ by an order of 10 from the mean are assumed to be missing a decimal place and are multipled/divided by 10 accordingly.
+Step 4) Repeat step 1-4 assuming some values will be missed because mean will be influenced by scewed numbers
+
+```{r subsetting}
+#Step one
+averages<- ddply(data1,c("Age","measure"),summarise,
+          mean = mean(value,na.rm=TRUE))
+data2<-left_join(data1,averages,by = c("Age","measure"))
+
+#Step two
+data2<-data2 %>% mutate(PEC = value/mean)
+
+##an aside
+data2d<-data2
+
+#Step three
+data2$value <-if_else(data2$PEC<0.1,data2$value*10,
+                        if_else(data2$PEC>10,data2$value*0.1,data2$value))
+data2<-select(data2,1:5)
+
+#Steo four
+averages<- ddply(data2,c("Age","measure"),summarise,
+          mean = mean(value,na.rm=TRUE))
+data2<-left_join(data1,averages,by = c("Age","measure"))
+data2<-data2 %>% mutate(PEC = value/mean)
+
+data2$value <-if_else(data2$PEC<0.1,data2$value*10,
+                        if_else(data2$PEC>10,data2$value*0.1,data2$value))
+dataPEC<-select(data2,1:4,7)
+dataPEC2<-spread(dataPEC,measure,PEC)
+data2<-select(data2,1:5)
+```
+
+My aside
+```{r graphing all}
+data2d$Date<-dmy(data2d$Date)
+plot1a <- ggplot(aes(y = PEC, x=Date), data = data2d)
+plot1a <- plot1 + geom_point(aes(colour=measure))+
+  #scale_y_log10()+
+  facet_grid(Age~.,scales="free")
+plot1a
+```
+Quick graphing histo of percentage of mean values
+
+```{r graph histoALL}
+plotPEC<- ggplot(aes((PEC)), data = dataPEC)+
+  geom_histogram()+
+  geom_vline(xintercept=1,color="red")+
+  facet_grid(Age~.)
+plotPEC
+```
+
+##More cleaning
+
+This is a more rigorous cleaning of the data.
+
+Step 1)Calculate the average and sd
+Step 2)Determine high and low cut off values. Currently set at High=3SD and Low=3SD
+Step 3)Remove duplicate values taking the mean of two measurments
+Steo
+
+```{r graphing2}
+#Step one
+averages2<- ddply(data2,c("Age","measure"),summarise,
+          mean = mean(value,na.rm=TRUE),
+          sd = sd(value,na.rm = TRUE))
+
+#Step two
+averages2<- averages2 %>% mutate(High = mean+(3*sd), Low = mean-(3*sd))
+data2<-left_join(data2,averages2,by = c("Age","measure"))
+data2<-filter(data2,value>Low)
+data2<-filter(data2,value<High)
+
+#Step three
+data2x<-select(data2,1:5)
+data2x<-ddply(data2x,c("Tick_vial", "Age","measure"),summarise,
+          value = mean(value,na.rm=TRUE))
+```
+
+#A quick check of data quality
+
+Look at varianence and mean of each value
+```{r graphing2}
+variance<- ddply(data2x,c("Age","measure"),summarise,
+          mean = mean(value,na.rm=TRUE),
+          sd = sd(value,na.rm = TRUE),
+          variance = sd(value,na.rm = TRUE)/mean(value,na.rm=TRUE))
+```
+
+#Transform cleaned data from long to wide
+
+This involves breaking the data up into AM and AF as well
+
+```{r data transform}
+data3<-spread(data2x,measure,value)
+data3F<-filter(data3, Age =="AF")
+data3M<-filter(data3, Age =="AM")
+```
+
+```{r counting NA}
+data3F$na_count <- apply(is.na(data3F), 1, sum)
+data3M$na_count <- apply(is.na(data3M), 1, sum)
+data3F<-filter(data3F,na_count<6)
+data3M<-filter(data3M,na_count<6)
+sapply(data3F, function(y) sum(length(which(is.na(y)))))
+sapply(data3M, function(y) sum(length(which(is.na(y)))))
+
+data3F<-select(data3F,-APL,-APW,-DPL,-DPW,-na_count)
+data3M<-select(data3M,-CHL,-CHW,-na_count)
+sapply(data3F, function(y) sum(length(which(is.na(y)))))
+sapply(data3M, function(y) sum(length(which(is.na(y)))))
+
+for(i in 1:ncol(data3F)){
+  data3F[is.na(data3F[,i]), i] <- mean(data3F[,i], na.rm = TRUE)
+}
+for(i in 1:ncol(data3M)){
+  data3M[is.na(data3M[,i]), i] <- mean(data3M[,i], na.rm = TRUE)
+}
+```
+
+```{r print to csv}
+write.csv(data3F, "data/data3F.csv")
+write.csv(data3M, "data/data3M.csv")
+```
+
+
+
+

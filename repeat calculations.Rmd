@@ -1,0 +1,29 @@
+---
+title: "Repeatability"
+author: "Hannah"
+date: "January 29, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages}
+library(tidyverse)
+library(rptR)
+```
+
+```{r loading}
+setwd("D:/Rfiles/ticks")
+data<-read_csv("repeat.csv")
+
+```
+
+```{r repeat}
+rpt(BL ~ (1 | Tick_Vial),grname = "Tick_Vial", data = data)
+rpt(BW ~ (1 | Tick_Vial),grname = "Tick_Vial", data = data)
+rpt(SL ~ (1 | Tick_Vial),grname = "Tick_Vial", data = data)
+rpt(SW ~ (1 | Tick_Vial),grname = "Tick_Vial", data = data)
+```
+

@@ -1,0 +1,255 @@
+---
+title: "Genetic analysis ixodes"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is the genetic analysis of three differnet genes that showed low levels of variation, so I catagorized everything as either dominate genotype or other, so it is binary.
+
+```{r data }
+library(MASS)
+library(car)
+library(mgcv)
+library(visreg)
+library(plyr)
+library(boot)
+library(ggplot2)
+library(tidyverse)
+```
+
+## Setting up the file
+
+```{r 2}
+setwd("D:/Rfiles/Tick_count_gen") 
+data<-read_csv("data/genetics.csv")
+summary(data)
+head(data)
+```
+## CO3 gene, glm and AIC
+
+```{r co3 glm}
+m1<-glm(co3~Island+Year+Host, family=binomial,  data= data, na.action = na.exclude )
+m2<-glm(co3~Year+Host, family=binomial,  data= data, na.action = na.exclude)
+m3<-glm(co3~Host+Island, family=binomial,  data= data, na.action = na.exclude)
+m4<-glm(co3~Island+Year, family=binomial,  data= data, na.action = na.exclude)
+m5<-glm(co3~Year, family=binomial,  data= data, na.action = na.exclude)
+m6<-glm(co3~Host, family=binomial,  data= data, na.action = na.exclude)
+m7<-glm(co3~Island, family=binomial,  data= data, na.action = na.exclude)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+models = list(m1,m2,m3,m4,m5,m6,m7)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+```{r co3 gam}
+gam1<-gam(co3~s(Jday_1)+Island, family = binomial, data=data)
+gam2<-gam(co3~s(Jday_1)+Tick, family = binomial, data=data)
+summary(gam1)
+AIC(m7,gam1,gam2)
+plot(gam1)
+plot(gam2)
+plot(gam1,pages=1,residuals=TRUE,all.terms=TRUE,shade=TRUE,shade.col=2)
+```
+
+```{r co3 graph gam}
+plotdata <- visreg(gam1, type = "contrast", plot = F)
+
+smooths <- ldply(plotdata, function(part)   
+  data.frame(Variable = part$meta$x, 
+             x=part$fit[[part$meta$x]], 
+             smooth=part$fit$visregFit, 
+             lower=part$fit$visregLwr, 
+             upper=part$fit$visregUpr))
+
+P5 <- smooths[ which(smooths$Variable== "Jday_1"), ]
+P5$smooth2 <- inv.logit(P5$smooth)
+P5$lower2 <- inv.logit(P5$lower)
+P5$upper2 <- inv.logit(P5$upper)
+
+SS<-ddply(data,"Jday_1",summarise,
+          N = length(co3),
+          mean = mean(co3,na.rm=TRUE))
+
+ddply(data,"Island",summarise,
+          N = length(co3),
+          mean = mean(co3,na.rm=TRUE))
+
+ddply(data,"Year",summarise,
+          N = length(co3),
+          mean = mean(co3,na.rm=TRUE))
+
+fig<-ggplot(data,aes(x = Jday_1, y = co3))+
+  geom_line(aes(x, smooth2), P5)+
+  ylab("Proportion Dominate Genotype")+
+  xlab("Julian Day")+
+  scale_y_continuous(breaks = c(0,0.5,1))+
+  scale_x_continuous(limit=c(145,230),breaks = c(151,181,212))+
+  theme_bw()
+
+fig+stat_summary(fun.data = "mean_cl_boot")+
+  geom_point(aes(Jday_1,mean,size=(N)),SS)
+
+fig+stat_summary(fun.data = "mean_cl_boot",size=0)+
+  geom_point(aes(Jday_1,mean,color=(N),size=0.5),SS)+
+  scale_color_gradient(low="grey80",high="grey1")
+
+```
+
+
+## CO1 gene, glm and AIC
+
+```{r co1 glm}
+ddply(data,"Island",summarise,
+          N = length(co1),
+          mean = mean(co1,na.rm=TRUE))
+
+ddply(data,"Year",summarise,
+          N = length(co1),
+          mean = mean(co1,na.rm=TRUE))
+
+ddply(data,"Host",summarise,
+          N = length(co1),
+          mean = mean(co1,na.rm=TRUE))
+
+m1<-glm(co1~Island+Year+Host, family=binomial,  data= data ,na.action = na.exclude)
+m2<-glm(co1~Year+Host, family=binomial,  data= data, na.action = na.exclude)
+m3<-glm(co1~Host+Island, family=binomial,  data= data, na.action = na.exclude)
+m4<-glm(co1~Island+Year, family=binomial,  data= data, na.action = na.exclude)
+m5<-glm(co1~Year, family=binomial,  data= data, na.action = na.exclude)
+m6<-glm(co1~Host, family=binomial,  data= data, na.action = na.exclude)
+m7<-glm(co1~Island, family=binomial,  data= data, na.action = na.exclude)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+models = list(m1,m2,m3,m4,m5,m6,m7)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+```{r co1 PosNeg}
+m10<-glm(co1~Year+Pos_Neg, family=binomial,  data= data)
+AIC(m10,m5)
+logLik(m10)
+```
+
+```{r co1 gam}
+summary(data)
+gam1<-gam(co1~s(Jday.1), family = binomial, data=data)
+summary(gam1)
+plot(gam1)
+plot(gam1,pages=1,residuals=TRUE,all.terms=TRUE,shade=TRUE,shade.col=2)
+```
+
+```{r co1 graph gam}
+plotdata <- visreg(gam1, type = "contrast", plot = F)
+smooths <- ldply(plotdata, function(part)   
+  data.frame(Variable = part$meta$x, 
+             x=part$fit[[part$meta$x]], 
+             smooth=part$fit$visregFit, 
+             lower=part$fit$visregLwr, 
+             upper=part$fit$visregUpr))
+P5 <- smooths[ which(smooths$Variable== "Jday.1"), ]
+P5$smooth2 <- inv.logit(P5$smooth)
+P5$lower2 <- inv.logit(P5$lower)
+P5$upper2 <- inv.logit(P5$upper)
+
+plot(P5$smooth)
+lines(P5$upper)
+plot(P5$x,P5$smooth2)
+lines(P5$x,P5$lower2)
+lines(P5$x,P5$upper2)
+```
+
+```{r co1 ggplot gam}
+fig<-ggplot(data,aes(x = Jday.1, y = co3))+
+  geom_line(aes(x, smooth2), P5)+
+  ylab("Ratio Female")+
+  xlab("Julian Day")+
+  scale_y_continuous(breaks = c(0,0.5,1))+
+  scale_x_continuous(limit=c(145,230),breaks = c(151,181,212))+
+  theme_bw()
+fig+stat_summary(fun.data = "mean_cl_boot")
+```
+
+## black16s gene, glm and AIC
+
+```{r black16s glm}
+ddply(data,"Island",summarise,
+          N = length(black_16S),
+          mean = mean(black_16S,na.rm=TRUE))
+
+ddply(data,"Year",summarise,
+          N = length(black_16S),
+          mean = mean(black_16S,na.rm=TRUE))
+
+ddply(data,"Host",summarise,
+          N = length(co3),
+          mean = mean(co3,na.rm=TRUE))
+data$black16s<-as.factor(data$black16s)
+m1<-glm(black16s~Island+Year+Host, family=binomial,  data= data , na.action = na.exclude)
+m2<-glm(black16s~Year+Host, family=binomial,  data= data)
+m3<-glm(black16s~Host+Island, family=binomial,  data= data)
+m4<-glm(black16s~Island+Year, family=binomial,  data= data)
+m5<-glm(black16s~Year, family=binomial,  data= data)
+m6<-glm(black16s~Host, family=binomial,  data= data)
+m7<-glm(black16s~Island, family=binomial,  data= data)
+AIC(m1,m2,m3,m4,m5,m6,m7)
+logLik(m1)
+logLik(m2)
+logLik(m3)
+logLik(m4)
+logLik(m5)
+logLik(m6)
+logLik(m7)
+```
+
+```{r black16s PosNeg}
+m10<-glm(black16s~Year+Pos_Neg, family=binomial,  data= data)
+AIC(m10,m5)
+logLik(m10)
+```
+
+```{r black16s gam}
+summary(data)
+gam1<-gam(black16s~s(Jday.1), family = binomial, data=data)
+summary(gam1)
+plot(gam1)
+plot(gam1,pages=1,residuals=TRUE,all.terms=TRUE,shade=TRUE,shade.col=2)
+```
+
+```{r black16s graph gam}
+plotdata <- visreg(gam1, type = "contrast", plot = F)
+smooths <- ldply(plotdata, function(part)   
+  data.frame(Variable = part$meta$x, 
+             x=part$fit[[part$meta$x]], 
+             smooth=part$fit$visregFit, 
+             lower=part$fit$visregLwr, 
+             upper=part$fit$visregUpr))
+P5 <- smooths[ which(smooths$Variable== "Jday.1"), ]
+P5$smooth2 <- inv.logit(P5$smooth)
+P5$lower2 <- inv.logit(P5$lower)
+P5$upper2 <- inv.logit(P5$upper)
+
+plot(P5$smooth)
+lines(P5$upper)
+plot(P5$x,P5$smooth2)
+lines(P5$x,P5$lower2)
+lines(P5$x,P5$upper2)
+```
+
+```{r black16s ggplot gam}
+fig<-ggplot(data,aes(x = Jday.1, y = co3))+
+  geom_line(aes(x, smooth2), P5)+
+  ylab("Ratio Female")+
+  xlab("Julian Day")+
+  scale_y_continuous(breaks = c(0,0.5,1))+
+  scale_x_continuous(limit=c(145,230),breaks = c(151,181,212))+
+  theme_bw()
+fig+stat_summary(fun.data = "mean_cl_boot")
+```

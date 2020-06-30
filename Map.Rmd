@@ -1,0 +1,79 @@
+---
+title: "Mapping study sites"
+output: html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up the file
+
+_Important_: Change the directory to where you want the map printed
+
+```{r data}
+setwd("D:/Rfiles/Maps") #working directory
+
+library(maps)
+library(mapdata)
+library(raster)
+library(GISTools)
+library(prettymapr)
+```
+## Setting up the axis lables
+
+```{r axis for map}
+#xaxis labels
+xat<-as.numeric(c("-59","-57","-55","-53","-51"))
+
+#yaxis labels one option:
+yat<-as.numeric(c("46","48","50","52","54"))
+
+xlab <- parse(text=degreeLabelsEW(xat))
+ylab <- parse(text=degreeLabelsNS(yat))
+```
+
+## printing the actual map
+
+```{r print map}
+pdf("Study site SCALE.pdf",7.5,7.5)
+m<-map("worldHires","Canada", 
+       xlim=c(-59.5, -50.5), 
+       ylim=c(45,55), 
+       col="grey75", fill=TRUE)
+
+# to add points for a sample site
+points(-54.183789, 46.82149, pch=16, col="black", cex=1.75) #CSM
+points(-54.116889, 49.84098, pch=16, col="black", cex=1.75) #LFOGO
+points(-56.575889, 53.93645, pch=16, col="black", cex=1.75) #GANN
+points(-52.773818, 47.26220, pch=16, col="black", cex=1.75) #GULL
+points(-52.809318, 47.18205, pch=16, col="black", cex=1.75) #GREAT
+
+text(-54.883789, 46.62149, "Cape St. Mary's", col="black", cex=1) #CSM
+text(-54.116889, 49.99, "Little Fogo Islands", col="black", cex=1) #LFOGO
+text(-56.3, 54.1, "Gannet Islands", col="black", cex=1) #GANN
+text(-51.9, 47.35220, "Gull Island", col="black", cex=1) #GULL
+text(-51.9, 47.08005, "Great Island", col="black", cex=1) #GREAT
+
+#add xaxis
+axis(1, at = xat, labels=xlab,cex.axis=0.85)
+
+#add yaxis
+axis(2,  at= yat, labels=ylab, cex.axis=0.85)
+
+
+#add a box around the map
+box(lwd=0.75)
+
+#add rectangle around study site
+#rect(-52.850,47.177,-52.750,47.265, col = c(NA,0),border = "black", lwd =2.25)
+
+#north arrow, only works with some packages
+addnortharrow(pos = "topright", padin = c(0.15, 0.15), scale = 0.5,
+             lwd = 1, border = "black", cols = c("white", "black"),
+            text.col = "black")
+
+#add map scale
+map.scale(-52.85, 53.45,3.07,"Km", 4, 50)
+dev.off()
+```

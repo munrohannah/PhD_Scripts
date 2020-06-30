@@ -1,0 +1,131 @@
+---
+title: "Ixodes SR Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up the file
+
+Setting the working directory, loading packages, and loading data.
+```{r packages}
+library(MASS)
+library(car)
+library(mgcv)
+library(ggplot2)
+library(boot)
+library(plyr)
+library(visreg)
+```
+
+```{r data}
+setwd("D:/Rfiles/Tick_Count_gen") #how to set my working directory
+data<-read.csv("data/AdultsSR2W.csv",header=TRUE)
+
+
+weather<-read.csv("data/WEATHER2.csv",header =T)
+nao<-read.csv("data/NAO.csv",header =T)
+data <- merge(data,weather,by=c("Date","Loc"))
+data <- merge(data,nao,by="Date")
+```
+
+##Removing non COMU and GULL samples
+
+```{r subsetting}
+data$Year<-factor(data$Year)
+data<-subset(data,Host=="COMU")
+data<-subset(data,Loc=="GULL")
+```
+
+##AIC on data
+
+```{r larva}
+summary(data)
+```
+
+
+
+```{r glm}
+m1 <- glm(FM ~ Year, data = data, family = binomial)
+m2 <- glm(FM ~ MaxT, data = data, family = binomial)
+m3 <- glm(FM ~ MinT, data = data, family = binomial)
+m4 <- glm(FM ~ MeanT, data = data, family = binomial)
+m5 <- glm(FM ~ Precip, data = data, family = binomial)
+m6 <- glm(FM ~ NAO, data = data, family = binomial)
+m7 <- glm(FM ~ Year+MaxT, data = data, family = binomial)
+m8 <- glm(FM ~ Year+MinT, data = data, family = binomial)
+m9 <- glm(FM ~ Year+MeanT, data = data, family = binomial)
+m10 <- glm(FM ~ Year+Precip, data = data, family = binomial)
+m11 <- glm(FM ~ Year+NAO, data = data, family = binomial)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+
+models = list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+```{r larva topmodel}
+Anova(m11,type="3")
+```
+
+```{r gam}
+gam1<-gam(FM~s(Day.x)+Year+NAO, family = binomial, data=data)
+AIC(gam1)
+logLik(gam1)
+gam2<-gam(FM~s(Day.x), family = binomial, data=data)
+AIC(gam2)
+logLik(gam2)
+summary(gam1)
+anova(gam1)
+plot(gam1)
+```
+
+```{r}
+plotdata <- visreg(gam1, type = "contrast", plot = F)
+
+smooths <- ldply(plotdata, function(part)   
+  data.frame(Variable = part$meta$x, 
+             x=part$fit[[part$meta$x]], 
+             smooth=part$fit$visregFit, 
+             lower=part$fit$visregLwr, 
+             upper=part$fit$visregUpr))
+
+P5 <- smooths[ which(smooths$Variable== "Day.x"), ]
+P5$smooth2 <- inv.logit(P5$smooth)
+P5$lower2 <- inv.logit(P5$lower)
+P5$upper2 <- inv.logit(P5$upper)
+
+plot(P5$smooth)
+lines(P5$upper)
+plot(P5$x,P5$smooth2)
+lines(P5$x,P5$lower2)
+lines(P5$x,P5$upper2)
+
+data$fm<-as.numeric(data$FM)
+###trying to get N for size of points
+SS<-ddply(data,"Day.x",summarise,
+          N = length(FM),
+          mean = mean(fm))
+
+fig<-ggplot(data,aes(x = Day.x, y = fm))+
+  geom_line(aes(x, smooth2), P5)+
+  ylab("Ratio Female")+
+  xlab("Julian Day")+
+  scale_y_continuous(breaks = c(0,0.5,1))+
+  scale_x_continuous(limit=c(145,230),breaks = c(151,181,212))+
+  theme_bw()
+fig
+
+fig+stat_summary(fun.data = "mean_cl_boot")+
+  geom_point(aes(Day.x,mean,size=log10(N)),SS)
+
+fig+stat_summary(fun.data = "mean_cl_boot",size=0)+
+  geom_point(aes(Day.x,mean,color=log10(N),size=0.5),SS)+
+  scale_color_gradient(low="grey80",high="grey1")
+```
+

@@ -1,0 +1,169 @@
+---
+title: "Ixodes Eng Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting up the file
+
+Setting the working directory, loading packages, and loading data.
+```{r packages}
+library(MASS)
+library(car)
+library(mgcv)
+```
+
+```{r data}
+setwd("D:/Rfiles/Tick_Eng_gen") #how to set my working directory
+dataA<-read.csv("data/adultFE.csv",header=TRUE)
+dataN<-read.csv("data/nymphE.csv",header=TRUE)
+dataL<-read.csv("data/larvaE.csv",header=TRUE)
+
+weather<-read.csv("data/WEATHER2.csv",header =T)
+nao<-read.csv("data/NAO.csv",header =T)
+dataA <- merge(dataA,weather,by=c("Date","Loc"))
+dataA <- merge(dataA,nao,by="Date")
+
+dataN <- merge(dataN,weather,by=c("Date","Loc"))
+dataN <- merge(dataN,nao,by="Date")
+
+dataL <- merge(dataL,weather,by=c("Date","Loc"))
+dataL <- merge(dataL,nao,by="Date")
+
+```
+
+##Removing non COMU and GULL samples
+
+```{r subsetting}
+dataL$Year<-factor(dataL$Year)
+dataL<-subset(dataL,Host=="COMU")
+dataL<-subset(dataL,Loc=="GULL")
+
+dataN$Year<-factor(dataN$Year)
+dataN<-subset(dataN,Host=="COMU")
+dataN<-subset(dataN,Loc=="GULL")
+
+dataA$Year<-factor(dataA$Year)
+dataA<-subset(dataA,Host=="COMU")
+dataA<-subset(dataA,Loc=="GULL")
+```
+
+##AIC on Larva
+
+```{r larva}
+summary(dataL)
+```
+
+
+
+```{r larva glm}
+m1 <- glm(Eng ~ Year, data = dataL, family = binomial)
+m2 <- glm(Eng ~ MaxT, data = dataL, family = binomial)
+m3 <- glm(Eng ~ MinT, data = dataL, family = binomial)
+m4 <- glm(Eng ~ MeanT, data = dataL, family = binomial)
+m5 <- glm(Eng ~ Precip, data = dataL, family = binomial)
+m6 <- glm(Eng ~ NAO, data = dataL, family = binomial)
+m7 <- glm(Eng ~ Year+MaxT, data = dataL, family = binomial)
+m8 <- glm(Eng ~ Year+MinT, data = dataL, family = binomial)
+m9 <- glm(Eng ~ Year+MeanT, data = dataL, family = binomial)
+m10 <- glm(Eng ~ Year+Precip, data = dataL, family = binomial)
+m11 <- glm(Eng ~ Year+NAO, data = dataL, family = binomial)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+
+models = list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+```{r larva topmodel}
+Anova(m10,type="3")
+```
+
+```{r larva gam}
+gam1<-gam(Eng~s(Day.x)+Year+Precip, family = binomial, data=dataL)
+AIC(gam1)
+logLik(gam1)
+summary(gam1)
+plot(gam1)
+```
+
+#Try with Nymphs
+
+```{r nymph glm}
+dataN$Year<-as.numeric(dataN$Year)
+m1 <- glm(Eng ~ Year, data = dataN, family = binomial)
+m2 <- glm(Eng ~ MaxT, data = dataN, family = binomial)
+m3 <- glm(Eng ~ MinT, data = dataN, family = binomial)
+m4 <- glm(Eng ~ MeanT, data = dataN, family = binomial)
+m5 <- glm(Eng ~ Precip, data = dataN, family = binomial)
+m6 <- glm(Eng ~ NAO, data = dataN, family = binomial)
+m7 <- glm(Eng ~ Year+MaxT, data = dataN, family = binomial)
+m8 <- glm(Eng ~ Year+MinT, data = dataN, family = binomial)
+m9 <- glm(Eng ~ Year+MeanT, data = dataN, family = binomial)
+m10 <- glm(Eng ~ Year+Precip, data = dataN, family = binomial)
+m11 <- glm(Eng ~ Year+NAO, data = dataN, family = binomial)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+
+models = list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+```{r nymph topmodel}
+Anova(m2,type="3")
+summary(m2)
+```
+
+```{r nymph gam}
+gam1<-gam(Eng~s(Day.x), family = binomial, data=dataN)
+AIC(gam1)
+logLik(gam1)
+summary(gam1)
+plot(gam1)
+```
+
+##Now with adults
+
+```{r AIC adults}
+m1 <- glm(Eng ~ Year, data = dataA, family = binomial)
+m2 <- glm(Eng ~ MaxT, data = dataA, family = binomial)
+m3 <- glm(Eng ~ MinT, data = dataA, family = binomial)
+m4 <- glm(Eng ~ MeanT, data = dataA, family = binomial)
+m5 <- glm(Eng ~ Precip, data = dataA, family = binomial)
+m6 <- glm(Eng ~ NAO, data = dataA, family = binomial)
+m7 <- glm(Eng ~ Year+MaxT, data = dataA, family = binomial)
+m8 <- glm(Eng ~ Year+MinT, data = dataA, family = binomial)
+m9 <- glm(Eng ~ Year+MeanT, data = dataA, family = binomial)
+m10 <- glm(Eng ~ Year+Precip, data = dataA, family = binomial)
+m11 <- glm(Eng ~ Year+NAO, data = dataA, family = binomial)
+AIC(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+
+models = list(m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11)
+x<-data.frame(sapply(models,logLik))
+x$name<-c("m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11")
+x$AIC<-sapply(models,AIC)
+x
+```
+
+
+
+```{r adult topmodel}
+Anova(m11,type="3")
+```
+
+```{r adult gam}
+gam1<-gam(Eng~s(Day.x)+Year+NAO, family = binomial, data=dataA)
+AIC(gam1)
+logLik(gam1)
+summary(gam1)
+plot(gam1)
+```
